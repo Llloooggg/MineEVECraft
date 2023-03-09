@@ -20,12 +20,12 @@ logging.basicConfig(
 def get_screenshot(save_result=False):
     eve_window = gw.getWindowsWithTitle(win_name)[0]
 
-    eve_window.activate()
-
-    if not eve_window.isMaximized:
+    was_minimized = False
+    if eve_window.isMinimized:
         was_minimized = True
-        eve_window.restore()
-        eve_window = gw.getWindowsWithTitle(win_name)[0]
+
+    eve_window.maximize()
+    eve_window.activate()
 
     if save_result:
         filepath = "images/screenshot.png"
@@ -58,7 +58,7 @@ def get_boxed(screenshot, save_result=False):
         img,
         lang="eng",
         output_type=Output.DATAFRAME,
-        config="--psm 3 -c preserve_interword_spaces=1",
+        config="--psm 4 -c preserve_interword_spaces=1",
     )
     filtered_df = raw_df.loc[
         (raw_df["text"].str.isalnum()) & (raw_df["text"].str.len() > 3)
