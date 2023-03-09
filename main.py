@@ -55,10 +55,13 @@ def get_boxed(screenshot, save_result=False):
     img = cv2.cvtColor(np.array(screenshot), cv2.COLOR_BGR2RGB)
 
     raw_df = pytesseract.image_to_data(
-        img, lang="eng", output_type=Output.DATAFRAME
+        img,
+        lang="eng",
+        output_type=Output.DATAFRAME,
+        config="--psm 3 -c preserve_interword_spaces=1",
     )
     filtered_df = raw_df.loc[
-        (raw_df["level"] == 5) & (raw_df["text"].notnull())
+        (raw_df["text"].str.isalnum()) & (raw_df["text"].str.len() > 3)
     ][["left", "top", "width", "height", "text"]]
 
     if save_result:
@@ -70,6 +73,15 @@ def get_boxed(screenshot, save_result=False):
                 r.height,
             )
             cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
+            cv2.putText(
+                img,
+                f"'{r.text}': {r.left}.{r.top} {r.width}.{r.height}",
+                (x, y - 10),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.4,
+                (0, 255, 0),
+                1,
+            )
 
         cv2.imwrite("images/highlighted_screenshot.png", img)
 
