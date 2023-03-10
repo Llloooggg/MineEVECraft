@@ -1,5 +1,4 @@
 import time
-import random
 import math
 import logging
 import numpy as np
@@ -90,11 +89,15 @@ def get_screenshot():
 
 
 def get_boxes(screenshot):
+    inverted_screenshot = cv2.bitwise_not(
+        cv2.cvtColor(screenshot, cv2.COLOR_BGR2GRAY)
+    )
+
     raw_boxes = pytesseract.image_to_data(
-        screenshot,
+        inverted_screenshot,
         lang="eng",
         output_type=Output.DATAFRAME,
-        config="--psm 3 -c preserve_interword_spaces=1",
+        config="--psm 3",
     )
 
     if save_result:
@@ -123,35 +126,45 @@ def union_boxes(base_boxes):
             "text",
             "block_num",
             "line_num",
+            "par_num",
         ]
     )
     for box in base_boxes["block_num"].unique():
-        words_in_blocks = base_boxes.loc[base_boxes["block_num"] == box]
+        paragraphs_in_box = base_boxes.loc[base_boxes["block_num"] == box][
+            "par_num"
+        ].unique()
+        for paragraph in paragraphs_in_box:
+            words_in_paragraph = base_boxes.loc[
+                (base_boxes["block_num"] == box)
+                & (base_boxes["par_num"] == paragraph),
+            ]
 
-        grouped_words = words_in_blocks.groupby("line_num", as_index=False)
+            grouped_words = words_in_paragraph.groupby(
+                "line_num", as_index=False
+            )
 
-        box_phrases = grouped_words["width"].sum()
-        box_phrases = box_phrases.merge(
-            grouped_words["height"].max(), on="line_num", how="left"
-        )
-        box_phrases = box_phrases.merge(
-            grouped_words["left"].min(), on="line_num", how="left"
-        )
-        box_phrases = box_phrases.merge(
-            grouped_words["top"].min(), on="line_num", how="left"
-        )
-        box_phrases = box_phrases.merge(
-            grouped_words["text"].apply(" ".join),
-            on="line_num",
-            how="left",
-        )
-        box_phrases["block_num"] = box
+            box_phrases = grouped_words["width"].sum()
+            box_phrases = box_phrases.merge(
+                grouped_words["height"].max(), on="line_num", how="left"
+            )
+            box_phrases = box_phrases.merge(
+                grouped_words["left"].min(), on="line_num", how="left"
+            )
+            box_phrases = box_phrases.merge(
+                grouped_words["top"].min(), on="line_num", how="left"
+            )
+            box_phrases = box_phrases.merge(
+                grouped_words["text"].apply(" ".join),
+                on="line_num",
+                how="left",
+            )
+            box_phrases["block_num"] = box
 
-        rightest_box = words_in_blocks.loc[
-            words_in_blocks["left"] == words_in_blocks["left"].max()
+        rightest_box = words_in_paragraph.loc[
+            words_in_paragraph["left"] == words_in_paragraph["left"].max()
         ]
-        leftest_box = words_in_blocks.loc[
-            words_in_blocks["left"] == words_in_blocks["left"].min()
+        leftest_box = words_in_paragraph.loc[
+            words_in_paragraph["left"] == words_in_paragraph["left"].min()
         ]
         box_phrases["width"] = (
             rightest_box.iloc[0].left
