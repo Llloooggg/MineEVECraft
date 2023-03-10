@@ -1,3 +1,4 @@
+import time
 import logging
 import numpy as np
 import pygetwindow as gw
@@ -52,10 +53,11 @@ def get_screenshot():
     eve_window.activate()
 
     if save_result:
-        filepath = "images/screenshot.png"
+        filepath = "images/0_screenshot.png"
     else:
         filepath = None
 
+    time.sleep(0.5)
     screenshot = pyautogui.screenshot(
         filepath,
         region=(
@@ -87,7 +89,7 @@ def get_boxes(screenshot):
 
     if save_result:
         save_highlighted_screenshot(
-            screenshot, base_boxes, "base_highlighted_screenshot"
+            screenshot, base_boxes, "1_base_highlighted_screenshot"
         )
         base_boxes.to_excel("xlsx/base_boxes.xlsx", index=False)
 
@@ -127,5 +129,5 @@ base_boxes = get_boxes(screenshot)
 unioned_boxes = union_boxes(base_boxes)
 
 save_highlighted_screenshot(
-    screenshot, unioned_boxes, "unioned_highlighted_screenshot"
+    screenshot, unioned_boxes, "2_unioned_highlighted_screenshot"
 )
