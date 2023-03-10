@@ -16,8 +16,32 @@ logging.basicConfig(
     handlers=[logging.StreamHandler()],
 )
 
+save_result = True
 
-def get_screenshot(save_result=False):
+
+def save_highlighted_screenshot(screenshot, boxes, filename):
+    new_image = screenshot.copy()
+    for r in boxes.itertuples():
+        (x, y, w, h) = (
+            r.left,
+            r.top,
+            r.width,
+            r.height,
+        )
+        cv2.rectangle(new_image, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        cv2.putText(
+            new_image,
+            f"'{r.text}': {r.left}.{r.top} {r.width}.{r.height}",
+            (x, y - 10),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.4,
+            (0, 255, 0),
+            1,
+        )
+    cv2.imwrite(f"images/{filename}.png", new_image)
+
+
+def get_screenshot():
     eve_window = gw.getWindowsWithTitle(win_name)[0]
 
     was_minimized = False
@@ -47,48 +71,61 @@ def get_screenshot(save_result=False):
 
     logging.info("Скриншот получен")
 
-    return screenshot
+    return cv2.cvtColor(np.array(screenshot), cv2.COLOR_BGR2RGB)
 
 
-def get_boxed(screenshot, save_result=False):
-    # img = cv2.imread("test.png")  # from file
-    img = cv2.cvtColor(np.array(screenshot), cv2.COLOR_BGR2RGB)
-
-    raw_df = pytesseract.image_to_data(
-        img,
+def get_boxes(screenshot):
+    raw_boxes = pytesseract.image_to_data(
+        screenshot,
         lang="eng",
         output_type=Output.DATAFRAME,
         config="--psm 4 -c preserve_interword_spaces=1",
     )
-    filtered_df = raw_df.loc[
-        (raw_df["text"].str.isalnum()) & (raw_df["text"].str.len() > 3)
-    ][["left", "top", "width", "height", "text"]]
+    base_boxes = raw_boxes.loc[(raw_boxes["text"].str.len() > 3)][
+        ["left", "top", "width", "height", "text", "line_num", "word_num"]
+    ]
 
     if save_result:
-        for r in filtered_df.itertuples():
-            (x, y, w, h) = (
-                r.left,
-                r.top,
-                r.width,
-                r.height,
-            )
-            cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
-            cv2.putText(
-                img,
-                f"'{r.text}': {r.left}.{r.top} {r.width}.{r.height}",
-                (x, y - 10),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.4,
-                (0, 255, 0),
-                1,
-            )
-
-        cv2.imwrite("images/highlighted_screenshot.png", img)
+        save_highlighted_screenshot(
+            screenshot, base_boxes, "base_highlighted_screenshot"
+        )
+        base_boxes.to_excel("xlsx/base_boxes.xlsx", index=False)
 
     logging.info("Боксы получены")
 
-    return filtered_df
+    return base_boxes
 
 
-screenshot = get_screenshot(True)
-get_boxed(screenshot, True)
+def union_boxes(base_boxes):
+    grouped_words = base_boxes.groupby("line_num", as_index=False)
+    result_boxes = grouped_words["width"].sum()
+    result_boxes = result_boxes.merge(
+        grouped_words["height"].max(), on="line_num", how="left"
+    )
+    result_boxes = result_boxes.merge(
+        grouped_words["left"].min(), on="line_num", how="left"
+    )
+    result_boxes = result_boxes.merge(
+        grouped_words["top"].min(), on="line_num", how="left"
+    )
+    result_boxes = result_boxes.merge(
+        grouped_words["text"].apply(" ".join),
+        on="line_num",
+        how="left",
+    )
+
+    if save_result:
+        result_boxes.to_excel("xlsx/unioned_boxes.xlsx", index=False)
+
+    logging.info("Боксы объединены")
+
+    return result_boxes
+
+
+screenshot = get_screenshot()
+base_boxes = get_boxes(screenshot)
+unioned_boxes = union_boxes(base_boxes)
+
+save_highlighted_screenshot(
+    screenshot, unioned_boxes, "unioned_highlighted_screenshot"
+)
