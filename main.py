@@ -22,6 +22,8 @@ logging.basicConfig(
 
 save_result = True
 
+pd.options.mode.use_inf_as_na = True
+
 
 def save_highlighted_screenshot(screenshot, boxes, filename):
     new_image = screenshot.copy()
@@ -103,7 +105,11 @@ def get_boxes(screenshot):
     if save_result:
         raw_boxes.to_excel("xlsx/0_raw_boxes.xlsx", index=False)
 
-    base_boxes = raw_boxes.loc[raw_boxes["text"].str.len() > 3]
+    base_boxes = raw_boxes.loc[
+        (raw_boxes["conf"] > 30)
+        & (raw_boxes["text"].notnull())
+        & (raw_boxes["text"].str.isalnum())
+    ]
 
     if save_result:
         save_highlighted_screenshot(
