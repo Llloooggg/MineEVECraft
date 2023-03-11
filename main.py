@@ -36,6 +36,18 @@ def move_mouse(x, y):
     )
 
 
+def click_mouse(x, y, right=False):
+    move_mouse(x, y)
+    if right:
+        pg.click(button="right")
+    else:
+        pg.click()
+        time.sleep(random.uniform(0.2, 0.8))
+        move_mouse(
+            x - random.randrange(500, 700), y - random.randrange(50, 150)
+        )
+
+
 def get_screenshot():
     eve_window = gw.getWindowsWithTitle(win_name)[0]
 
@@ -83,8 +95,8 @@ def highlite_boxes(boxes, module_name, file_name):
 
         cv2.putText(
             canvas,
-            result.text,
-            (tl[0], tl[1] - 5),
+            f"{result.text} {cent}",
+            (tl[0], tl[1] - 10),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.4,
             (0, 255, 0),
@@ -147,7 +159,7 @@ def get_boxes(screenshot):
     return results_frame
 
 
-def get_targets(boxes_frame, name=False):
+def get_targets(boxes_frame, text=False):
     anchor_top_x, anchor_top_y = boxes_frame.loc[
         boxes_frame["text"] == "name", ["cent_x", "cent_y"]
     ].values[0]
@@ -163,13 +175,13 @@ def get_targets(boxes_frame, name=False):
             )
         )
     ]
-    if name:
-        targets = targets.loc[targets["text"].str.contains(name)]
+    if text:
+        targets = targets.loc[targets["text"].str.contains(text)]
     logging.info("Цели: получены")
 
     if debug:
         targets.to_excel("xlsx/targets.xlsx", index=False)
-        logging.debug("Боксы: документ сохранен")
+        logging.debug("Цели: документ сохранен")
 
         highlite_boxes(targets, "Цели", "targets")
 
@@ -177,30 +189,55 @@ def get_targets(boxes_frame, name=False):
 
 
 def get_cors_by_unique_name(boxes_frame, name):
-    x, y = boxes_frame.loc[
+    sub_ftame = boxes_frame.loc[
         boxes_frame["text"] == name, ["cent_x", "cent_y"]
+    ]
+    if not sub_ftame.empty:
+        x, y = sub_ftame.values[0]
+        return (x, y)
+    else:
+        return None
+
+
+def go_to_minefield():
+    global screenshot
+    screenshot = get_screenshot()
+    boxes_frame = get_boxes(screenshot)
+    targets = get_targets(boxes_frame, "asteroid belt")
+
+    click_mouse(targets.iloc[0].cent_x, targets.iloc[0].cent_y, True)
+
+    screenshot = get_screenshot()
+    boxes_frame = get_boxes(screenshot)
+
+    x, y = boxes_frame.loc[
+        boxes_frame["text"].str.contains("warp"), ["cent_x", "cent_y"]
     ].values[0]
-    return x, y
+    click_mouse(x, y)
 
 
 def start_mine():
-    screenshot = get_screenshot()
-    boxes_frame = get_boxes(screenshot)
-    targets = get_targets(boxes_frame, "\\(veldspar\\)")
+    while True:
+        global screenshot
+        screenshot = get_screenshot()
+        boxes_frame = get_boxes(screenshot)
+        target = get_targets(boxes_frame, "\\(veldspar\\)").iloc[0]
 
-    move_mouse(targets.iloc[0].cent_x, targets.iloc[0].cent_y)
-    pg.click(button="right")
+        click_mouse(target.cent_x, target.cent_y, True)
 
-    screenshot = get_screenshot()
-    boxes_frame = get_boxes(screenshot)
+        screenshot = get_screenshot()
+        boxes_frame = get_boxes(screenshot)
 
-    x, y = get_cors_by_unique_name(boxes_frame, "lock target")
-    move_mouse(x, y)
-    pg.click()
-
-    time.sleep(random.uniform(4.4, 5.8))
-    pg.press("f1")
-    pg.press("f2")
+        target_lock_cor = get_cors_by_unique_name(boxes_frame, "lock target")
+        if target_lock_cor:
+            click_mouse(target_lock_cor[0], target_lock_cor[1])
+            time.sleep(random.uniform(4.4, 5.8))
+            pg.press("f1")
+            pg.press("f2")
+            return
+        else:
+            approach_cor = get_cors_by_unique_name(boxes_frame, "approach")
+            click_mouse(approach_cor[0], approach_cor[1])
 
 
 """
@@ -216,3 +253,16 @@ while True:
 
     input("Следущий скриншот - enter")
 """
+
+
+def main(current_state="EMPTY"):
+    if current_state == "UNDOCKED":
+        go_to_minefield()
+        current_state = "ON_MINEFILD"
+        time.sleep(random.uniform(15, 20))
+    if current_state == "ON_MINEFILD":
+        start_mine()
+        current_state = "MINING"
+
+
+main("UNDOCKED")
