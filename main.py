@@ -60,6 +60,29 @@ def get_screenshot():
     return cv2.cvtColor(np.array(screenshot), cv2.COLOR_BGR2RGB)
 
 
+def highlite_boxes(boxes, module_name, file_name):
+    canvas = screenshot.copy()
+    for result in boxes.itertuples(index=False):
+        tl = (result.tl_x, result.tl_y)
+        br = (result.br_x, result.br_y)
+        cv2.rectangle(canvas, tl, br, (0, 255, 0), 1)
+
+        cent = (result.cent_x, result.cent_y)
+        cv2.circle(canvas, cent, 0, (0, 0, 255), 3)  # отрисовка центра бокса
+
+        cv2.putText(
+            canvas,
+            result.text,
+            (tl[0], tl[1] - 5),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.4,
+            (0, 255, 0),
+            1,
+        )
+    cv2.imwrite(f"images/{file_name}.png", canvas)
+    logging.debug(f"{module_name}: изображение сохранено")
+
+
 def get_boxes(screenshot):
     results = reader.readtext(
         cv2.bitwise_not(cv2.cvtColor(screenshot, cv2.COLOR_BGR2GRAY)),
@@ -108,49 +131,36 @@ def get_boxes(screenshot):
         results_frame.to_excel("xlsx/boxes.xlsx", index=False)
         logging.debug("Боксы: документ сохранен")
 
-        for result in results_frame.itertuples(index=False):
-            tl = (result.tl_x, result.tl_y)
-            br = (result.br_x, result.br_y)
-            cv2.rectangle(screenshot, tl, br, (0, 255, 0), 1)
-
-            # cent = (result.cent_x, result.cent_y)
-            # cv2.circle(screenshot, cent, 0, (0, 0, 255), 3) # отрисовка центра бокса
-
-            cv2.putText(
-                screenshot,
-                result.text,
-                (tl[0], tl[1] - 5),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.4,
-                (0, 255, 0),
-                1,
-            )
-
-        cv2.imwrite("images/screenshot_highlited.png", screenshot)
-        logging.debug("Боксы: изображение сохранено")
+        highlite_boxes(results_frame, "Боксы", "boxes")
 
     return results_frame
 
 
-def get_targets(boxes_frame, name):
-    anchor_y = boxes_frame.loc[boxes_frame["text"] == "name", "cent_y"].values[
-        0
-    ]
+def get_targets(boxes_frame, name=False):
+    anchor_top_x, anchor_top_y = boxes_frame.loc[
+        boxes_frame["text"] == "name", ["cent_x", "cent_y"]
+    ].values[0]
+    anchor_bot_y = boxes_frame.loc[
+        boxes_frame["text"] == "drones in", "cent_y"
+    ].values[0]
 
-    cor_delta = 100
     targets = boxes_frame.loc[
-        (boxes_frame["text"].str.contains(name))
+        (boxes_frame["cent_y"].between(anchor_top_y + 10, anchor_bot_y - 10))
         & (
-            boxes_frame["cent_y"].between(
-                anchor_y - cor_delta, anchor_y + cor_delta
+            boxes_frame["cent_x"].between(
+                anchor_top_x - 100, anchor_top_x + 100
             )
         )
     ]
+    if name:
+        targets = targets.loc[targets["text"].str.contains(name)]
     logging.info("Цели: получены")
 
     if debug:
         targets.to_excel("xlsx/targets.xlsx", index=False)
-        logging.debug("Цели: документ сохранен")
+        logging.debug("Боксы: документ сохранен")
+
+        highlite_boxes(targets, "Цели", "targets")
 
     return targets
 
@@ -158,5 +168,5 @@ def get_targets(boxes_frame, name):
 while True:
     screenshot = get_screenshot()
     boxes_frame = get_boxes(screenshot)
-    get_targets(boxes_frame, "asteroid")
+    get_targets(boxes_frame, "(veldspar)")
     input("Следущий скриншот - enter")
