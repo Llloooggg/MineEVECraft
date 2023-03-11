@@ -1,10 +1,12 @@
 import time
+import random
 import logging
 
 import numpy as np
-import pygetwindow as gw
-import pyautogui
 import cv2
+import pygetwindow as gw
+import pyautogui as pg
+from pyclick import HumanClicker
 import easyocr
 import pandas as pd
 
@@ -24,6 +26,15 @@ logging.info("Бот: запущен")
 reader = easyocr.Reader(["en"], gpu=True)
 logging.info("Бот: модели загружены")
 
+hc = HumanClicker()
+
+
+def move_mouse(x, y):
+    hc.move(
+        (x, y),
+        random.uniform(0.1, 0.4),
+    )
+
 
 def get_screenshot():
     eve_window = gw.getWindowsWithTitle(win_name)[0]
@@ -41,7 +52,7 @@ def get_screenshot():
         filepath = None
 
     time.sleep(0.5)
-    screenshot = pyautogui.screenshot(
+    screenshot = pg.screenshot(
         filepath,
         region=(
             eve_window.box.left + 10,
@@ -168,5 +179,9 @@ def get_targets(boxes_frame, name=False):
 while True:
     screenshot = get_screenshot()
     boxes_frame = get_boxes(screenshot)
-    get_targets(boxes_frame, "(veldspar)")
+    targets = get_targets(boxes_frame, "(veldspar)")
+
+    move_mouse(targets.iloc[0].cent_x, targets.iloc[0].cent_y)
+    move_mouse(30, 30)
+
     input("Следущий скриншот - enter")
