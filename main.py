@@ -1,5 +1,4 @@
 import time
-import math
 import logging
 
 import numpy as np
@@ -7,6 +6,7 @@ import pygetwindow as gw
 import pyautogui
 import cv2
 import easyocr
+import pandas as pd
 
 
 win_name = "EVE - Nostrom Stone"
@@ -18,38 +18,7 @@ logging.basicConfig(
     handlers=[logging.StreamHandler()],
 )
 
-save_result = True
-
-
-def save_highlighted_screenshot(screenshot, boxes, filename):
-    new_image = screenshot.copy()
-
-    for block in boxes["block_num"].unique():
-        boxes_in_block = boxes.loc[boxes["block_num"] == block]
-        # Повторяемая генерация rgb-цвета для числа
-        col = (
-            round(math.sin(0.024 * block * 255 / 3 + 0) * 127 + 128),
-            round(math.sin(0.024 * block * 255 / 3 + 2) * 127 + 128),
-            round(math.sin(0.024 * block * 255 / 3 + 4) * 127 + 128),
-        )
-        for r in boxes_in_block.itertuples():
-            (x, y, w, h) = (
-                r.left,
-                r.top,
-                r.width,
-                r.height,
-            )
-            cv2.rectangle(new_image, (x, y), (x + w, y + h), col, 2)
-            cv2.putText(
-                new_image,
-                f"'{r.text}' x:{r.left} y:{r.top} l:{r.line_num}",
-                (x, y - 10),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.4,
-                col,
-                1,
-            )
-    cv2.imwrite(f"images/{filename}.png", new_image)
+debug = True
 
 
 def get_screenshot():
@@ -62,7 +31,7 @@ def get_screenshot():
     eve_window.maximize()
     eve_window.activate()
 
-    if save_result:
+    if debug:
         filepath = "images/0_screenshot.png"
     else:
         filepath = None
@@ -86,33 +55,65 @@ def get_screenshot():
     return cv2.cvtColor(np.array(screenshot), cv2.COLOR_BGR2RGB)
 
 
-screenshot = get_screenshot()
-
-reader = easyocr.Reader(["en"], gpu=True)
-result = reader.readtext(screenshot)
-
-
-for bbox, text, prob in result:
-    (tl, tr, br, bl) = bbox
-    tl = (int(tl[0]), int(tl[1]))
-    tr = (int(tr[0]), int(tr[1]))
-    br = (int(br[0]), int(br[1]))
-    bl = (int(bl[0]), int(bl[1]))
-
-    text = "".join([c if ord(c) < 128 else "" for c in text]).strip()
-    cv2.rectangle(screenshot, tl, br, (0, 255, 0), 2)
-    cv2.putText(
-        screenshot,
-        text,
-        (tl[0], tl[1] - 10),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.8,
-        (0, 255, 0),
-        2,
+def get_boxes(screenshot):
+    reader = easyocr.Reader(["en"], gpu=True)
+    results = reader.readtext(
+        cv2.bitwise_not(cv2.cvtColor(screenshot, cv2.COLOR_BGR2GRAY)),
+        width_ths=1,
     )
 
+    results_frame = pd.DataFrame(
+        [
+            [
+                int(result[0][0][0]),
+                int(result[0][0][1]),
+                int(result[0][1][0]),
+                int(result[0][1][1]),
+                int(result[0][2][0]),
+                int(result[0][2][1]),
+                int(result[0][3][0]),
+                int(result[0][3][1]),
+                result[1],
+            ]
+            for result in results
+        ],
+        columns=[
+            "tl_x",
+            "tl_y",
+            "bl_x",
+            "bl_y",
+            "br_x",
+            "br_y",
+            "tr_x",
+            "tr_y",
+            "text",
+        ],
+    )
 
-print(result)
+    results_frame = results_frame.loc[results_frame["text"].str.len() > 2]
 
-cv2.imshow("screenshot", screenshot)
-cv2.waitKey(0)
+    if debug:
+        results_frame.to_excel("xlsx/1_boxes.xlsx", index=False)
+        for result in results_frame.itertuples(index=False):
+            tl = (result.tl_x, result.tl_y)
+            br = (result.br_x, result.br_y)
+
+            cv2.rectangle(screenshot, tl, br, (0, 255, 0), 1)
+            cv2.putText(
+                screenshot,
+                result.text,
+                (tl[0], tl[1] - 5),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.4,
+                (0, 255, 0),
+                1,
+            )
+        cv2.imwrite("images/1_highlited_screenshot.png", screenshot)
+
+    logging.info("Боксы получены")
+
+    return results_frame
+
+
+screenshot = get_screenshot()
+get_boxes(screenshot)
