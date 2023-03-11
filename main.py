@@ -31,7 +31,7 @@ hc = HumanClicker()
 
 def move_mouse(x, y):
     hc.move(
-        (x, y),
+        (x, y - 3),
         random.uniform(0.1, 0.4),
     )
 
@@ -176,12 +176,43 @@ def get_targets(boxes_frame, name=False):
     return targets
 
 
+def get_cors_by_unique_name(boxes_frame, name):
+    x, y = boxes_frame.loc[
+        boxes_frame["text"] == name, ["cent_x", "cent_y"]
+    ].values[0]
+    return x, y
+
+
+def start_mine():
+    screenshot = get_screenshot()
+    boxes_frame = get_boxes(screenshot)
+    targets = get_targets(boxes_frame, "\\(veldspar\\)")
+
+    move_mouse(targets.iloc[0].cent_x, targets.iloc[0].cent_y)
+    pg.click(button="right")
+
+    screenshot = get_screenshot()
+    boxes_frame = get_boxes(screenshot)
+
+    x, y = get_cors_by_unique_name(boxes_frame, "lock target")
+    move_mouse(x, y)
+    pg.click()
+
+    time.sleep(random.uniform(4.4, 5.8))
+    pg.press("f1")
+    pg.press("f2")
+
+
+"""
 while True:
     screenshot = get_screenshot()
     boxes_frame = get_boxes(screenshot)
-    targets = get_targets(boxes_frame, "(veldspar)")
+    targets = get_targets(boxes_frame, "\\(veldspar\\)")
 
-    move_mouse(targets.iloc[0].cent_x, targets.iloc[0].cent_y)
-    move_mouse(30, 30)
+    # move_mouse(targets.iloc[0].cent_x, targets.iloc[0].cent_y)
+    # pg.click()
+    # pg.click(button="right")
+    # move_mouse(30, 30)
 
     input("Следущий скриншот - enter")
+"""
