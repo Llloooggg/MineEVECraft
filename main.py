@@ -8,17 +8,21 @@ import cv2
 import easyocr
 import pandas as pd
 
+debug = True
 
 win_name = "EVE - Nostrom Stone"
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s - %(message)s",
     datefmt="%d-%b-%y %H:%M:%S",
     handlers=[logging.StreamHandler()],
 )
 
-debug = True
+logging.info("Бот: запущен")
+
+reader = easyocr.Reader(["en"], gpu=True)
+logging.info("Бот: модели загружены")
 
 
 def get_screenshot():
@@ -32,7 +36,7 @@ def get_screenshot():
     eve_window.activate()
 
     if debug:
-        filepath = "images/0_screenshot.png"
+        filepath = "images/screenshot.png"
     else:
         filepath = None
 
@@ -46,59 +50,72 @@ def get_screenshot():
             eve_window.box.height - 10,
         ),
     )
+    logging.info("Скриншот: получен")
+    if debug:
+        logging.debug("Скриншот: сохранен")
 
     if was_minimized:
         eve_window.minimize()
-
-    logging.info("Скриншот получен")
 
     return cv2.cvtColor(np.array(screenshot), cv2.COLOR_BGR2RGB)
 
 
 def get_boxes(screenshot):
-    reader = easyocr.Reader(["en"], gpu=True)
     results = reader.readtext(
         cv2.bitwise_not(cv2.cvtColor(screenshot, cv2.COLOR_BGR2GRAY)),
-        width_ths=1,
+        low_text=0.4,
+        width_ths=1.5,
     )
+    logging.debug("Боксы: получены")
 
     results_frame = pd.DataFrame(
         [
             [
-                int(result[0][0][0]),
-                int(result[0][0][1]),
-                int(result[0][1][0]),
-                int(result[0][1][1]),
-                int(result[0][2][0]),
-                int(result[0][2][1]),
-                int(result[0][3][0]),
-                int(result[0][3][1]),
-                result[1],
+                int(result[0][0][0]),  # tl_x
+                int(result[0][0][1]),  # tl_y
+                int(result[0][1][0]),  # tr_x
+                int(result[0][1][1]),  # tr_y
+                int(result[0][2][0]),  # br_x
+                int(result[0][2][1]),  # br_y
+                int(result[0][3][0]),  # bl_x
+                int(result[0][3][1]),  # bl_y
+                int((result[0][0][0] + result[0][1][0]) / 2),  # cent_x
+                int((result[0][0][1] + result[0][3][1]) / 2),  # cent_y
+                result[1].lower(),  # text
             ]
             for result in results
         ],
         columns=[
             "tl_x",
             "tl_y",
-            "bl_x",
-            "bl_y",
-            "br_x",
-            "br_y",
             "tr_x",
             "tr_y",
+            "br_x",
+            "br_y",
+            "bl_x",
+            "bl_y",
+            "cent_x",
+            "cent_y",
             "text",
         ],
     )
 
     results_frame = results_frame.loc[results_frame["text"].str.len() > 2]
+    logging.debug("Боксы: переведены во фрейм")
+    logging.info("Боксы: готовы")
 
     if debug:
-        results_frame.to_excel("xlsx/1_boxes.xlsx", index=False)
+        results_frame.to_excel("xlsx/boxes.xlsx", index=False)
+        logging.debug("Боксы: документ сохранен")
+
         for result in results_frame.itertuples(index=False):
             tl = (result.tl_x, result.tl_y)
             br = (result.br_x, result.br_y)
-
             cv2.rectangle(screenshot, tl, br, (0, 255, 0), 1)
+
+            # cent = (result.cent_x, result.cent_y)
+            # cv2.circle(screenshot, cent, 0, (0, 0, 255), 3) # отрисовка центра бокса
+
             cv2.putText(
                 screenshot,
                 result.text,
@@ -108,12 +125,38 @@ def get_boxes(screenshot):
                 (0, 255, 0),
                 1,
             )
-        cv2.imwrite("images/1_highlited_screenshot.png", screenshot)
 
-    logging.info("Боксы получены")
+        cv2.imwrite("images/screenshot_highlited.png", screenshot)
+        logging.debug("Боксы: изображение сохранено")
 
     return results_frame
 
 
-screenshot = get_screenshot()
-get_boxes(screenshot)
+def get_targets(boxes_frame, name):
+    anchor_y = boxes_frame.loc[boxes_frame["text"] == "name", "cent_y"].values[
+        0
+    ]
+
+    cor_delta = 100
+    targets = boxes_frame.loc[
+        (boxes_frame["text"].str.contains(name))
+        & (
+            boxes_frame["cent_y"].between(
+                anchor_y - cor_delta, anchor_y + cor_delta
+            )
+        )
+    ]
+    logging.info("Цели: получены")
+
+    if debug:
+        targets.to_excel("xlsx/targets.xlsx", index=False)
+        logging.debug("Цели: документ сохранен")
+
+    return targets
+
+
+while True:
+    screenshot = get_screenshot()
+    boxes_frame = get_boxes(screenshot)
+    get_targets(boxes_frame, "asteroid")
+    input("Следущий скриншот - enter")
