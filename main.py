@@ -36,7 +36,7 @@ def move_mouse(x, y):
 
 
 def click_mouse(x, y, right=False, runaway=True):
-    move_mouse(x + random.randrange(-5, 5), y + random.randrange(-5, 5))
+    move_mouse(x + random.randrange(-5, 5), y + random.randrange(-3, 3))
     if right:
         pg.click(button="right")
     else:
@@ -46,6 +46,7 @@ def click_mouse(x, y, right=False, runaway=True):
             move_mouse(
                 x - random.randrange(500, 700), y - random.randrange(-300, 300)
             )
+    time.sleep(random.uniform(0.1, 0.5))
 
 
 def get_screenshot():
@@ -165,7 +166,7 @@ def get_boxes(screenshot):
     return results_frame
 
 
-def get_targets(boxes_frame, text=False):
+def get_targets(boxes_frame, text=False, x_delta=100):
     anchor_top_x, anchor_top_y = boxes_frame.loc[
         boxes_frame["text"].str.contains("nam"), ["cent_x", "cent_y"]
     ].values[0]
@@ -177,7 +178,7 @@ def get_targets(boxes_frame, text=False):
         (boxes_frame["cent_y"].between(anchor_top_y + 10, anchor_bot_y - 10))
         & (
             boxes_frame["cent_x"].between(
-                anchor_top_x - 100, anchor_top_x + 100
+                anchor_top_x - 100, anchor_top_x + x_delta
             )
         )
     ]
@@ -207,34 +208,44 @@ def get_cors_by_unique_name(boxes_frame, name):
 
 def go_to_minefield():
     global screenshot
-    screenshot = get_screenshot()
-    boxes_frame = get_boxes(screenshot)
-    targets = get_targets(boxes_frame, "belt")
+    while True:
+        screenshot = get_screenshot()
+        boxes_frame = get_boxes(screenshot)
+        target = get_targets(boxes_frame, "belt", x_delta=150).sample().iloc[0]
 
-    click_mouse(targets.iloc[0].cent_x, targets.iloc[0].cent_y, True)
+        click_mouse(target.cent_x, target.cent_y, right=True, runaway=False)
 
-    screenshot = get_screenshot()
-    boxes_frame = get_boxes(screenshot)
+        screenshot = get_screenshot()
+        boxes_frame = get_boxes(screenshot)
 
-    x, y = boxes_frame.loc[
-        boxes_frame["text"].str.contains("warp"), ["cent_x", "cent_y"]
-    ].values[0]
-    click_mouse(x, y)
+        if get_cors_by_unique_name(
+            boxes_frame, "look"
+        ):  # защита при ошибочном состоянии
+            return
+
+        warp_cor = get_cors_by_unique_name(boxes_frame, "warp")
+        if warp_cor:
+            click_mouse(warp_cor[0], warp_cor[1])
+            return
 
 
 def start_mine():
+    global screenshot
     while True:
-        global screenshot
         screenshot = get_screenshot()
         boxes_frame = get_boxes(screenshot)
         target = get_targets(boxes_frame, "(veldspar)|(scordite)").iloc[0]
+        if target.empty:
+            continue
 
         click_mouse(target.cent_x, target.cent_y, True)
 
         screenshot = get_screenshot()
         boxes_frame = get_boxes(screenshot)
 
-        target_lock_cor = get_cors_by_unique_name(boxes_frame, "lock")
+        target_lock_cor = get_cors_by_unique_name(
+            boxes_frame, "lock"
+        )  # свдиг примерно 40, 90
         if target_lock_cor:
             click_mouse(target_lock_cor[0], target_lock_cor[1])
             time.sleep(random.uniform(4.4, 5.8))
@@ -242,13 +253,16 @@ def start_mine():
             time.sleep(random.uniform(0.1, 1))
             pg.press("f2")
             return
-        else:
-            # approach_cor = get_cors_by_unique_name(boxes_frame, "approach")
-            click_mouse(target.cent_x + 40, target.cent_y + 20, runaway=False)
-            move_mouse(
-                target.cent_x - random.randrange(500, 700),
-                target.cent_y - random.randrange(50, 400),
-            )
+        approach_cor = get_cors_by_unique_name(boxes_frame, "approach")
+        if approach_cor:
+            click_mouse(approach_cor[0], approach_cor[1])
+            time.sleep(random.uniform(20, 25))
+        # решение через сдвиг
+        # click_mouse(target.cent_x + 40, target.cent_y + 20, runaway=False)
+        # move_mouse(
+        #     target.cent_x - random.randrange(500, 700),
+        #     target.cent_y - random.randrange(50, 400),
+        # )
 
 
 """
@@ -265,10 +279,10 @@ def main(current_state="EMPTY"):
     if current_state == "UNDOCKED":
         go_to_minefield()
         current_state = "ON_MINEFILD"
-        time.sleep(random.uniform(15, 20))
+        time.sleep(random.uniform(20, 25))
     if current_state == "ON_MINEFILD":
         start_mine()
         current_state = "MINING"
 
 
-main("ON_MINEFILD")
+main("UNDOCKED")
