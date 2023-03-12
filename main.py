@@ -166,7 +166,7 @@ def get_boxes(screenshot):
     return results_frame
 
 
-def get_targets(boxes_frame, text=False, x_delta=100):
+def get_targets(boxes_frame, text=False, right_delta=100, left_delta=100):
     anchor_top_x, anchor_top_y = boxes_frame.loc[
         boxes_frame["text"].str.contains("nam"), ["cent_x", "cent_y"]
     ].values[0]
@@ -178,7 +178,7 @@ def get_targets(boxes_frame, text=False, x_delta=100):
         (boxes_frame["cent_y"].between(anchor_top_y + 10, anchor_bot_y - 10))
         & (
             boxes_frame["cent_x"].between(
-                anchor_top_x - 100, anchor_top_x + x_delta
+                anchor_top_x - left_delta, anchor_top_x + right_delta
             )
         )
     ]
@@ -193,6 +193,35 @@ def get_targets(boxes_frame, text=False, x_delta=100):
         highlite_boxes(targets, "Цели", "targets")
 
     return targets
+
+
+def get_items_amounts(boxes_frame, text=False, left_delta=50, right_delta=50):
+    anchor_top_x, anchor_top_y = boxes_frame.loc[
+        boxes_frame["text"] == "quantity", ["cent_x", "cent_y"]
+    ].values[0]
+    anchor_bot_y = boxes_frame.loc[
+        boxes_frame["text"] == "price", "cent_y"
+    ].values[0]
+
+    items = boxes_frame.loc[
+        (boxes_frame["cent_y"].between(anchor_top_y + 10, anchor_bot_y - 10))
+        & (
+            boxes_frame["cent_x"].between(
+                anchor_top_x - left_delta, anchor_top_x + right_delta
+            )
+        )
+    ]
+    if text:
+        items = items.loc[items["text"].str.contains(text)]
+    logging.info("Вещи: получены")
+
+    if debug:
+        items.to_excel("xlsx/items.xlsx", index=False)
+        logging.debug("Вещи: документ сохранен")
+
+        highlite_boxes(items, "Вещи", "items")
+
+    return items
 
 
 def get_cors_by_unique_name(boxes_frame, name):
@@ -212,7 +241,7 @@ def go_to_minefield():
     while True:
         screenshot = get_screenshot()
         boxes_frame = get_boxes(screenshot)
-        target = get_targets(boxes_frame, "belt", x_delta=150)
+        target = get_targets(boxes_frame, "belt", right_delta=150)
         if target.empty:
             logging.warning(
                 "Перемещение к месту добычи: потенциальные цели не найдены"
@@ -285,7 +314,8 @@ def start_mine():
 while True:
     screenshot = get_screenshot()
     boxes_frame = get_boxes(screenshot)
-    targets = get_targets(boxes_frame, "belt")
+    # targets = get_targets(boxes_frame, "belt")
+    items = get_items_amounts(boxes_frame)
 
     input("Следущий скриншот - enter")
 """
