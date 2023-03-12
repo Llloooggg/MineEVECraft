@@ -18,7 +18,7 @@ pt.tesseract_cmd = "C:\\Program Files\\Tesseract-OCR\\tesseract.exe"
 
 logging.basicConfig(
     level=logging.DEBUG,
-    format="%(asctime)s - %(message)s",
+    format="%(asctime)s - %(levelname)s - %(message)s",
     datefmt="%d-%b-%y %H:%M:%S",
     handlers=[logging.StreamHandler()],
 )
@@ -116,7 +116,7 @@ def get_boxes(screenshot):
     )
     logging.debug("Боксы: получены")
     results = results.loc[
-        (results["conf"] > 30)
+        (results["conf"] > 20)
         & (results["text"].notnull())
         & (len(results["text"].str.strip()) > 0)
     ]
@@ -166,12 +166,19 @@ def get_boxes(screenshot):
     return results_frame
 
 
-def get_targets(boxes_frame, text=False, right_delta=100, left_delta=100):
+def get_targets(
+    boxes_frame,
+    text=False,
+    left_delta=100,
+    right_delta=150,
+):
     anchor_top_x, anchor_top_y = boxes_frame.loc[
-        boxes_frame["text"].str.contains("nam"), ["cent_x", "cent_y"]
+        boxes_frame["text"] == "distance",
+        ["cent_x", "cent_y"],
     ].values[0]
     anchor_bot_y = boxes_frame.loc[
-        boxes_frame["text"] == "hobgoblin", "cent_y"
+        boxes_frame["text"] == "hobgoblin",
+        "cent_y",
     ].values[0]
 
     targets = boxes_frame.loc[
@@ -197,7 +204,8 @@ def get_targets(boxes_frame, text=False, right_delta=100, left_delta=100):
 
 def get_items_amounts(boxes_frame, text=False, left_delta=50, right_delta=50):
     anchor_top_x, anchor_top_y = boxes_frame.loc[
-        boxes_frame["text"] == "quantity", ["cent_x", "cent_y"]
+        boxes_frame["text"] == "quantity",
+        ["cent_x", "cent_y"],
     ].values[0]
     anchor_bot_y = boxes_frame.loc[
         boxes_frame["text"] == "price", "cent_y"
@@ -237,6 +245,7 @@ def get_cors_by_unique_name(boxes_frame, name):
 
 def go_to_minefield():
     global screenshot
+    global current_state
     logging.info("Перемещение к месту добычи: начато")
     while True:
         screenshot = get_screenshot()
@@ -261,31 +270,60 @@ def go_to_minefield():
             logging.warning(
                 "Перемещение к месту добычи: цель добычи уже зафиксирована"
             )
+            current_state = "ON_MINEFILD"
+            time.sleep(random.uniform(20, 25))
             return
 
         warp_cor = get_cors_by_unique_name(boxes_frame, "warp")
         if warp_cor:
             click_mouse(warp_cor[0], warp_cor[1])
             logging.info("Перемещение к месту добычи: перемещене корабля")
+            current_state = "ON_MINEFILD"
+            time.sleep(random.uniform(20, 25))
             return
 
 
 def start_mine():
     global screenshot
+    global current_state
     logging.info("Добыча: начата")
     while True:
         screenshot = get_screenshot()
         boxes_frame = get_boxes(screenshot)
-        target = get_targets(boxes_frame, "(veldspar)|(scordite)").iloc[0]
+
+        # проверяем заполненность инвентаря
+        try:
+            items = get_items_amounts(boxes_frame)
+        except:
+            logging.warning("Добыча: ошибка поулчения инвентаря")
+            continue
+        if (
+            not items.empty
+            and items["text"].str.strip(" .,?").astype("int").sum() > 30000
+        ):
+            current_state = "GO_HOME"
+            return
+
+        target = get_targets(boxes_frame, "veldspar|scordite")
         if target.empty:
             logging.warning("Добыча: потенциальные цели не найдены")
-            continue
+            current_state = "UNDOCKED"
+            return
 
-        click_mouse(target.cent_x, target.cent_y, True)
+        target = target.iloc[0]
+        click_mouse(target.cent_x, target.cent_y, right=True)
 
         screenshot = get_screenshot()
         boxes_frame = get_boxes(screenshot)
 
+        # проверяем захвачена ли цель
+        unlock_cor = get_cors_by_unique_name(boxes_frame, "unlock")
+        if unlock_cor:
+            logging.info("Добыча: цель в фокусе")
+            time.sleep(random.uniform(20, 25))
+            continue
+
+        # ищем цель для захвата
         target_lock_cor = get_cors_by_unique_name(
             boxes_frame, "lock"
         )  # свдиг примерно 40, 90
@@ -295,19 +333,20 @@ def start_mine():
             pg.press("f1")
             time.sleep(random.uniform(0.1, 1))
             pg.press("f2")
-            logging.info("Добыча: цель добычи найдена")
-            return
+            logging.info("Добыча: цель добычи захвачена")
+
+        # ищем цель для сближения
         approach_cor = get_cors_by_unique_name(boxes_frame, "approach")
         if approach_cor:
             click_mouse(approach_cor[0], approach_cor[1])
-            logging.info("Добыча: цель сближения найдена")
+            logging.info("Начало добычи: цель сближения найдена")
             time.sleep(random.uniform(20, 25))
-        # решение через сдвиг
-        # click_mouse(target.cent_x + 40, target.cent_y + 20, runaway=False)
-        # move_mouse(
-        #     target.cent_x - random.randrange(500, 700),
-        #     target.cent_y - random.randrange(50, 400),
-        # )
+            # решение через сдвиг
+            # click_mouse(target.cent_x + 40, target.cent_y + 20, runaway=False)
+            # move_mouse(
+            #     target.cent_x - random.randrange(500, 700),
+            #     target.cent_y - random.randrange(50, 400),
+            # )
 
 
 """
@@ -324,11 +363,9 @@ while True:
 def main(current_state="EMPTY"):
     if current_state == "UNDOCKED":
         go_to_minefield()
-        current_state = "ON_MINEFILD"
-        time.sleep(random.uniform(20, 25))
     if current_state == "ON_MINEFILD":
         start_mine()
-        current_state = "MINING"
+        current_state = "GO_HOME"
 
 
-main("UNDOCKED")
+main("ON_MINEFILD")
