@@ -35,24 +35,25 @@ def move_mouse(x, y):
     )
 
 
-def click_mouse(x, y, right=False):
-    move_mouse(x, y)
+def click_mouse(x, y, right=False, runaway=True):
+    move_mouse(x + random.randrange(-5, 5), y + random.randrange(-5, 5))
     if right:
         pg.click(button="right")
     else:
         pg.click()
-        time.sleep(random.uniform(0.2, 0.8))
-        move_mouse(
-            x - random.randrange(500, 700), y - random.randrange(50, 150)
-        )
+        time.sleep(random.uniform(0.1, 0.5))
+        if runaway:
+            move_mouse(
+                x - random.randrange(500, 700), y - random.randrange(-300, 300)
+            )
 
 
 def get_screenshot():
     eve_window = gw.getWindowsWithTitle(win_name)[0]
 
-    was_minimized = False
-    if eve_window.isMinimized:
-        was_minimized = True
+    # was_minimized = False
+    # if eve_window.isMinimized:
+    #     was_minimized = True
 
     eve_window.maximize()
     eve_window.activate()
@@ -76,8 +77,8 @@ def get_screenshot():
     if debug:
         logging.debug("Скриншот: сохранен")
 
-    if was_minimized:
-        eve_window.minimize()
+    # if was_minimized:
+    #     eve_window.minimize()
 
     return cv2.cvtColor(np.array(screenshot), cv2.COLOR_BGR2RGB)
 
@@ -166,7 +167,7 @@ def get_boxes(screenshot):
 
 def get_targets(boxes_frame, text=False):
     anchor_top_x, anchor_top_y = boxes_frame.loc[
-        boxes_frame["text"] == "name", ["cent_x", "cent_y"]
+        boxes_frame["text"].str.contains("nam"), ["cent_x", "cent_y"]
     ].values[0]
     anchor_bot_y = boxes_frame.loc[
         boxes_frame["text"] == "hobgoblin", "cent_y"
@@ -226,7 +227,7 @@ def start_mine():
         global screenshot
         screenshot = get_screenshot()
         boxes_frame = get_boxes(screenshot)
-        target = get_targets(boxes_frame, "\\(veldspar\\)").iloc[0]
+        target = get_targets(boxes_frame, "(veldspar)|(scordite)").iloc[0]
 
         click_mouse(target.cent_x, target.cent_y, True)
 
@@ -242,15 +243,19 @@ def start_mine():
             pg.press("f2")
             return
         else:
-            approach_cor = get_cors_by_unique_name(boxes_frame, "approach")
-            click_mouse(approach_cor[0], approach_cor[1])
+            # approach_cor = get_cors_by_unique_name(boxes_frame, "approach")
+            click_mouse(target.cent_x + 40, target.cent_y + 20, runaway=False)
+            move_mouse(
+                target.cent_x - random.randrange(500, 700),
+                target.cent_y - random.randrange(50, 400),
+            )
 
 
 """
 while True:
     screenshot = get_screenshot()
     boxes_frame = get_boxes(screenshot)
-    targets = get_targets(boxes_frame, "(veldspar)")
+    targets = get_targets(boxes_frame, "belt")
 
     input("Следущий скриншот - enter")
 """
