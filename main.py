@@ -208,10 +208,18 @@ def get_cors_by_unique_name(boxes_frame, name):
 
 def go_to_minefield():
     global screenshot
+    logging.info("Перемещение к месту добычи: начато")
     while True:
         screenshot = get_screenshot()
         boxes_frame = get_boxes(screenshot)
-        target = get_targets(boxes_frame, "belt", x_delta=150).sample().iloc[0]
+        target = get_targets(boxes_frame, "belt", x_delta=150)
+        if target.empty:
+            logging.warning(
+                "Перемещение к месту добычи: потенциальные цели не найдены"
+            )
+            continue
+
+        target = target.sample().iloc[0]
 
         click_mouse(target.cent_x, target.cent_y, right=True, runaway=False)
 
@@ -221,21 +229,27 @@ def go_to_minefield():
         if get_cors_by_unique_name(
             boxes_frame, "look"
         ):  # защита при ошибочном состоянии
+            logging.warning(
+                "Перемещение к месту добычи: цель добычи уже зафиксирована"
+            )
             return
 
         warp_cor = get_cors_by_unique_name(boxes_frame, "warp")
         if warp_cor:
             click_mouse(warp_cor[0], warp_cor[1])
+            logging.info("Перемещение к месту добычи: перемещене корабля")
             return
 
 
 def start_mine():
     global screenshot
+    logging.info("Добыча: начата")
     while True:
         screenshot = get_screenshot()
         boxes_frame = get_boxes(screenshot)
         target = get_targets(boxes_frame, "(veldspar)|(scordite)").iloc[0]
         if target.empty:
+            logging.warning("Добыча: потенциальные цели не найдены")
             continue
 
         click_mouse(target.cent_x, target.cent_y, True)
@@ -252,10 +266,12 @@ def start_mine():
             pg.press("f1")
             time.sleep(random.uniform(0.1, 1))
             pg.press("f2")
+            logging.info("Добыча: цель добычи найдена")
             return
         approach_cor = get_cors_by_unique_name(boxes_frame, "approach")
         if approach_cor:
             click_mouse(approach_cor[0], approach_cor[1])
+            logging.info("Добыча: цель сближения найдена")
             time.sleep(random.uniform(20, 25))
         # решение через сдвиг
         # click_mouse(target.cent_x + 40, target.cent_y + 20, runaway=False)
