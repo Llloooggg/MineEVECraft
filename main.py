@@ -7,12 +7,14 @@ import cv2
 import pygetwindow as gw
 import pyautogui as pg
 from pyclick import HumanClicker
-import easyocr
+from pytesseract import pytesseract as pt
 import pandas as pd
 
 debug = True
 
 win_name = "EVE - Nostrom Stone"
+
+pt.tesseract_cmd = "C:\\Program Files\\Tesseract-OCR\\tesseract.exe"
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -22,9 +24,6 @@ logging.basicConfig(
 )
 
 logging.info("Бот: запущен")
-
-reader = easyocr.Reader(["en"], gpu=True)
-logging.info("Бот: модели загружены")
 
 hc = HumanClicker()
 
@@ -107,29 +106,35 @@ def highlite_boxes(boxes, module_name, file_name):
 
 
 def get_boxes(screenshot):
-    results = reader.readtext(
+    results = pt.image_to_data(
         cv2.bitwise_not(cv2.cvtColor(screenshot, cv2.COLOR_BGR2GRAY)),
-        low_text=0.4,
-        width_ths=1.5,
+        lang="eng",
+        output_type=pt.Output.DATAFRAME,
+        config="--psm 3",
     )
     logging.debug("Боксы: получены")
+    results = results.loc[
+        (results["conf"] > 30)
+        & (results["text"].notnull())
+        & (len(results["text"].str.strip()) > 0)
+    ]
 
     results_frame = pd.DataFrame(
         [
             [
-                int(result[0][0][0]),  # tl_x
-                int(result[0][0][1]),  # tl_y
-                int(result[0][1][0]),  # tr_x
-                int(result[0][1][1]),  # tr_y
-                int(result[0][2][0]),  # br_x
-                int(result[0][2][1]),  # br_y
-                int(result[0][3][0]),  # bl_x
-                int(result[0][3][1]),  # bl_y
-                int((result[0][0][0] + result[0][1][0]) / 2),  # cent_x
-                int((result[0][0][1] + result[0][3][1]) / 2),  # cent_y
-                result[1].lower(),  # text
+                result.left,  # tl_x
+                result.top,  # tl_y
+                result.left + result.width,  # tr_x
+                result.top,  # tr_y
+                result.left + result.width,  # br_x
+                result.top + result.height,  # br_y
+                result.left,  # bl_x
+                result.top + result.height,  # bl_y
+                int(result.left + result.width / 2),  # cent_x
+                int(result.top + result.height / 2),  # cent_y
+                result.text.lower(),  # text
             ]
-            for result in results
+            for result in results.itertuples(index=False)
         ],
         columns=[
             "tl_x",
@@ -147,7 +152,7 @@ def get_boxes(screenshot):
     )
 
     results_frame = results_frame.loc[results_frame["text"].str.len() > 2]
-    logging.debug("Боксы: переведены во фрейм")
+    logging.debug("Боксы: переведены в удобный фрейм")
     logging.info("Боксы: готовы")
 
     if debug:
@@ -164,7 +169,7 @@ def get_targets(boxes_frame, text=False):
         boxes_frame["text"] == "name", ["cent_x", "cent_y"]
     ].values[0]
     anchor_bot_y = boxes_frame.loc[
-        boxes_frame["text"] == "drones in", "cent_y"
+        boxes_frame["text"] == "hobgoblin", "cent_y"
     ].values[0]
 
     targets = boxes_frame.loc[
@@ -203,7 +208,7 @@ def go_to_minefield():
     global screenshot
     screenshot = get_screenshot()
     boxes_frame = get_boxes(screenshot)
-    targets = get_targets(boxes_frame, "asteroid belt")
+    targets = get_targets(boxes_frame, "belt")
 
     click_mouse(targets.iloc[0].cent_x, targets.iloc[0].cent_y, True)
 
@@ -228,11 +233,12 @@ def start_mine():
         screenshot = get_screenshot()
         boxes_frame = get_boxes(screenshot)
 
-        target_lock_cor = get_cors_by_unique_name(boxes_frame, "lock target")
+        target_lock_cor = get_cors_by_unique_name(boxes_frame, "lock")
         if target_lock_cor:
             click_mouse(target_lock_cor[0], target_lock_cor[1])
             time.sleep(random.uniform(4.4, 5.8))
             pg.press("f1")
+            time.sleep(random.uniform(0.1, 1))
             pg.press("f2")
             return
         else:
@@ -244,12 +250,7 @@ def start_mine():
 while True:
     screenshot = get_screenshot()
     boxes_frame = get_boxes(screenshot)
-    targets = get_targets(boxes_frame, "\\(veldspar\\)")
-
-    # move_mouse(targets.iloc[0].cent_x, targets.iloc[0].cent_y)
-    # pg.click()
-    # pg.click(button="right")
-    # move_mouse(30, 30)
+    targets = get_targets(boxes_frame, "(veldspar)")
 
     input("Следущий скриншот - enter")
 """
@@ -265,4 +266,4 @@ def main(current_state="EMPTY"):
         current_state = "MINING"
 
 
-main("UNDOCKED")
+main("ON_MINEFILD")
